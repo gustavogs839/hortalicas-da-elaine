@@ -6,11 +6,8 @@ const els = {
   authScreen: document.getElementById("authScreen"),
   appContainer: document.getElementById("appContainer"),
   authForm: document.getElementById("authForm"),
-  authEmail: document.getElementById("authEmail"),
-  authPassword: document.getElementById("authPassword"),
   authStatus: document.getElementById("authStatus"),
   loginBtn: document.getElementById("loginBtn"),
-  registerBtn: document.getElementById("registerBtn"),
   logoutBtn: document.getElementById("logoutBtn"),
   usuarioInfo: document.getElementById("usuarioInfo"),
   modoLocalBtn: document.getElementById("modoLocalBtn"),
@@ -48,6 +45,7 @@ let usuarioAtual = null;
 let modoOnline = false;
 let auth = null;
 let db = null;
+let googleProvider = null;
 let filtros = {
   tipo: "todos",
   categoria: "todas",
@@ -77,8 +75,7 @@ function init() {
   els.filtroDataInicio.addEventListener("change", onFiltroChange);
   els.filtroDataFim.addEventListener("change", onFiltroChange);
   els.limparFiltro.addEventListener("click", onLimparFiltro);
-  els.authForm.addEventListener("submit", onLogin);
-  els.registerBtn.addEventListener("click", onRegister);
+  els.loginBtn.addEventListener("click", onLoginWithGoogle);
   els.logoutBtn.addEventListener("click", onLogout);
   els.modoLocalBtn.addEventListener("click", onModoLocal);
 
@@ -86,7 +83,7 @@ function init() {
   atualizarOpcoesFiltroCategoria();
 
   if (inicializarFirebase()) {
-    setAuthStatus("Entre com seu email e senha para acessar o painel.", "info");
+    setAuthStatus("Clique em Entrar com Google para acessar o painel.", "info");
 
     auth.onAuthStateChanged(async (user) => {
       usuarioAtual = user;
@@ -105,7 +102,7 @@ function init() {
       modoOnline = false;
       atualizarCabecalhoUsuario();
       atualizarVisibilidadeApp(false);
-      setAuthStatus("Faca login ou crie sua conta para sincronizar os dados.", "info");
+      setAuthStatus("Clique em Entrar com Google para sincronizar os dados.", "info");
     });
 
     return;
@@ -549,6 +546,8 @@ function inicializarFirebase() {
 
     auth = firebase.auth();
     db = firebase.firestore();
+    googleProvider = new firebase.auth.GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: "select_account" });
     return true;
   } catch (error) {
     console.error("Falha ao iniciar Firebase:", error);
@@ -579,61 +578,19 @@ function setAuthStatus(mensagem, tone = "info") {
 
 function alternarBotoesAuth(emProcessamento) {
   els.loginBtn.disabled = emProcessamento;
-  els.registerBtn.disabled = emProcessamento;
   els.modoLocalBtn.disabled = emProcessamento;
 }
 
-async function onLogin(event) {
-  event.preventDefault();
-
-  if (!auth) {
+async function onLoginWithGoogle() {
+  if (!auth || !googleProvider) {
     ativarModoLocal("Preencha o firebase-config.js para ativar o login online.");
     return;
   }
 
-  const email = els.authEmail.value.trim();
-  const senha = els.authPassword.value;
-
-  if (!email || !senha) {
-    setAuthStatus("Informe email e senha para entrar.", "error");
-    return;
-  }
-
   try {
     alternarBotoesAuth(true);
-    setAuthStatus("Validando acesso...", "info");
-    await auth.signInWithEmailAndPassword(email, senha);
-  } catch (error) {
-    setAuthStatus(traduzirErroAuth(error), "error");
-  } finally {
-    alternarBotoesAuth(false);
-  }
-}
-
-async function onRegister() {
-  if (!auth) {
-    ativarModoLocal("Preencha o firebase-config.js para ativar o cadastro online.");
-    return;
-  }
-
-  const email = els.authEmail.value.trim();
-  const senha = els.authPassword.value;
-
-  if (!email || !senha) {
-    setAuthStatus("Preencha email e senha para criar a conta.", "error");
-    return;
-  }
-
-  if (senha.length < 6) {
-    setAuthStatus("A senha precisa ter pelo menos 6 caracteres.", "error");
-    return;
-  }
-
-  try {
-    alternarBotoesAuth(true);
-    setAuthStatus("Criando sua conta...", "info");
-    await auth.createUserWithEmailAndPassword(email, senha);
-    setAuthStatus("Conta criada com sucesso. Aguarde o carregamento do painel.", "success");
+    setAuthStatus("Abrindo acesso com Google...", "info");
+    await auth.signInWithPopup(googleProvider);
   } catch (error) {
     setAuthStatus(traduzirErroAuth(error), "error");
   } finally {
@@ -745,17 +702,16 @@ async function persistirMovimentacoes() {
 
 function traduzirErroAuth(error) {
   const mensagens = {
-    "auth/email-already-in-use": "Este email ja esta em uso.",
-    "auth/invalid-email": "O email informado nao e valido.",
-    "auth/weak-password": "A senha e muito fraca. Use ao menos 6 caracteres.",
-    "auth/invalid-credential": "Email ou senha incorretos.",
-    "auth/user-not-found": "Usuario nao encontrado.",
-    "auth/wrong-password": "Senha incorreta.",
+    "auth/popup-closed-by-user": "A janela do Google foi fechada antes da conclusao.",
+    "auth/cancelled-popup-request": "O login foi cancelado. Tente novamente.",
+    "auth/popup-blocked": "O navegador bloqueou a janela do Google. Libere o pop-up e tente de novo.",
+    "auth/unauthorized-domain": "Este dominio ainda nao esta liberado no Firebase Auth. Adicione o dominio do Vercel em Authorized domains.",
+    "auth/account-exists-with-different-credential": "Ja existe conta com este email usando outro metodo de acesso.",
     "auth/too-many-requests": "Muitas tentativas. Aguarde um pouco e tente novamente.",
     "auth/network-request-failed": "Falha de conexao. Verifique sua internet."
   };
 
-  return mensagens[error?.code] || "Nao foi possivel concluir a autenticacao agora.";
+  return mensagens[error?.code] || "Nao foi possivel concluir a autenticacao com Google agora.";
 }
 
 function onFiltroChange() {

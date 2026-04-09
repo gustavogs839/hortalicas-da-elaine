@@ -21,29 +21,21 @@
 				<div>
 					<span class="auth-badge">Acesso protegido</span>
 					<h2>Entrar no painel</h2>
-					<p>Use seu email e senha para sincronizar as movimentacoes.</p>
+					<p>Use sua conta Google para sincronizar as movimentacoes com seguranca.</p>
 				</div>
 			</div>
 
 			<form id="authForm" class="finance-form">
-				<div class="form-row">
-					<label for="authEmail">Email</label>
-					<input type="email" id="authEmail" placeholder="voce@exemplo.com" required>
-				</div>
-
-				<div class="form-row">
-					<label for="authPassword">Senha</label>
-					<input type="password" id="authPassword" placeholder="Minimo de 6 caracteres" required>
-				</div>
-
-				<div class="auth-actions">
-					<button type="submit" class="primary-btn" id="loginBtn">Entrar</button>
-					<button type="button" class="ghost-btn" id="registerBtn">Criar conta</button>
+				<div class="auth-actions single-action">
+					<button type="button" class="google-btn" id="loginBtn">
+						<span class="google-mark">G</span>
+						Entrar com Google
+					</button>
 				</div>
 
 				<button type="button" class="ghost-btn auth-secondary" id="modoLocalBtn">Usar modo local</button>
 				<p class="auth-status" id="authStatus">Carregando autenticacao...</p>
-				<p class="auth-helper">Depois de preencher o arquivo firebase-config.js, o login passa a usar o Firebase Auth.</p>
+				<p class="auth-helper">Se usar Vercel, adicione o dominio publicado em Authentication &gt; Settings &gt; Authorized domains.</p>
 			</form>
 		</div>
 	</section>

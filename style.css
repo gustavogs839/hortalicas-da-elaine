@@ -92,6 +92,43 @@ button:disabled {
   gap: 8px;
 }
 
+.auth-actions.single-action {
+  grid-template-columns: 1fr;
+}
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #d5dfcf;
+  border-radius: 12px;
+  padding: 11px 14px;
+  background: #ffffff;
+  color: #233321;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(36, 70, 26, 0.08);
+}
+
+.google-btn:hover {
+  background: #f7fbf4;
+}
+
+.google-mark {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4285f4, #34a853, #fbbc05, #ea4335);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
 .auth-secondary {
   margin-top: 0;
   width: 100%;
