@@ -1,7 +1,19 @@
 const STORAGE_KEY = "hortalicasElaineMovimentacoes";
 const CATEGORIAS_RECEITA = ["Feira Gyn Viva", "Feira Goia", "Pontinho Max", "Entregas"];
+const FIREBASE_PLACEHOLDER = "COLE_SUA_API_KEY_AQUI";
 
 const els = {
+  authScreen: document.getElementById("authScreen"),
+  appContainer: document.getElementById("appContainer"),
+  authForm: document.getElementById("authForm"),
+  authEmail: document.getElementById("authEmail"),
+  authPassword: document.getElementById("authPassword"),
+  authStatus: document.getElementById("authStatus"),
+  loginBtn: document.getElementById("loginBtn"),
+  registerBtn: document.getElementById("registerBtn"),
+  logoutBtn: document.getElementById("logoutBtn"),
+  usuarioInfo: document.getElementById("usuarioInfo"),
+  modoLocalBtn: document.getElementById("modoLocalBtn"),
   dataAtual: document.getElementById("dataAtual"),
   saldoAtual: document.getElementById("saldoAtual"),
   totalReceitas: document.getElementById("totalReceitas"),
@@ -27,46 +39,15 @@ const els = {
   cancelEdit: document.getElementById("cancelEdit")
 };
 
-const defaultMovimentacoes = [
-  {
-    id: crypto.randomUUID(),
-    tipo: "receita",
-    descricao: "Venda semanal",
-    categoria: "Feira Gyn Viva",
-    valor: 1480,
-    data: hojeISO(-5)
-  },
-  {
-    id: crypto.randomUUID(),
-    tipo: "despesa",
-    descricao: "Compra de mudas",
-    categoria: "Ceasa",
-    valor: 420,
-    data: hojeISO(-4)
-  },
-  {
-    id: crypto.randomUUID(),
-    tipo: "despesa",
-    descricao: "Abastecimento da semana",
-    categoria: "Combustivel",
-    valor: 180,
-    data: hojeISO(-2)
-  },
-  {
-    id: crypto.randomUUID(),
-    tipo: "receita",
-    descricao: "Venda de final de semana",
-    categoria: "Pontinho Max",
-    valor: 930,
-    data: hojeISO(-1)
-  }
-];
-
-let movimentacoes = carregarMovimentacoes();
+let movimentacoes = [];
 let chartReceitaDespesa;
 let chartEvolucao;
 let chartDespesasCategoria;
 let editandoId = null;
+let usuarioAtual = null;
+let modoOnline = false;
+let auth = null;
+let db = null;
 let filtros = {
   tipo: "todos",
   categoria: "todas",
@@ -96,14 +77,44 @@ function init() {
   els.filtroDataInicio.addEventListener("change", onFiltroChange);
   els.filtroDataFim.addEventListener("change", onFiltroChange);
   els.limparFiltro.addEventListener("click", onLimparFiltro);
+  els.authForm.addEventListener("submit", onLogin);
+  els.registerBtn.addEventListener("click", onRegister);
+  els.logoutBtn.addEventListener("click", onLogout);
+  els.modoLocalBtn.addEventListener("click", onModoLocal);
 
   aplicarTipoAutomatico();
   atualizarOpcoesFiltroCategoria();
 
-  render();
+  if (inicializarFirebase()) {
+    setAuthStatus("Entre com seu email e senha para acessar o painel.", "info");
+
+    auth.onAuthStateChanged(async (user) => {
+      usuarioAtual = user;
+
+      if (user) {
+        modoOnline = true;
+        atualizarCabecalhoUsuario();
+        setAuthStatus(`Conectado como ${user.email}.`, "success");
+        await carregarMovimentacoesNuvem();
+        atualizarVisibilidadeApp(true);
+        render();
+        return;
+      }
+
+      movimentacoes = [];
+      modoOnline = false;
+      atualizarCabecalhoUsuario();
+      atualizarVisibilidadeApp(false);
+      setAuthStatus("Faca login ou crie sua conta para sincronizar os dados.", "info");
+    });
+
+    return;
+  }
+
+  ativarModoLocal("Firebase ainda nao configurado. O painel esta em modo local neste navegador.");
 }
 
-function onSubmitForm(event) {
+async function onSubmitForm(event) {
   event.preventDefault();
 
   const descricao = els.descricao.value.trim();
@@ -141,12 +152,18 @@ function onSubmitForm(event) {
     });
   }
 
-  persistirMovimentacoes();
+  try {
+    await persistirMovimentacoes();
+  } catch (error) {
+    console.error(error);
+    alert("Movimentacao salva localmente, mas houve falha na sincronizacao online.");
+  }
+
   resetarFormulario();
   render();
 }
 
-function onTabelaAcao(event) {
+async function onTabelaAcao(event) {
   const botao = event.target.closest("button[data-id]");
   if (!botao) {
     return;
@@ -161,7 +178,13 @@ function onTabelaAcao(event) {
   }
 
   movimentacoes = movimentacoes.filter((item) => item.id !== id);
-  persistirMovimentacoes();
+
+  try {
+    await persistirMovimentacoes();
+  } catch (error) {
+    console.error(error);
+    alert("Exclusao salva localmente, mas nao sincronizou com o banco online.");
+  }
 
   if (editandoId === id) {
     resetarFormulario();
@@ -170,7 +193,7 @@ function onTabelaAcao(event) {
   render();
 }
 
-function onLimparTudo() {
+async function onLimparTudo() {
   if (movimentacoes.length === 0) {
     return;
   }
@@ -181,7 +204,14 @@ function onLimparTudo() {
   }
 
   movimentacoes = [];
-  persistirMovimentacoes();
+
+  try {
+    await persistirMovimentacoes();
+  } catch (error) {
+    console.error(error);
+    alert("Os dados foram limpos localmente, mas houve falha na sincronizacao online.");
+  }
+
   render();
 }
 
@@ -464,26 +494,268 @@ function hojeISO(offsetDias) {
   return d.toISOString().split("T")[0];
 }
 
-function carregarMovimentacoes() {
+function criarMovimentacoesIniciais() {
+  return [
+    {
+      id: crypto.randomUUID(),
+      tipo: "receita",
+      descricao: "Venda semanal",
+      categoria: "Feira Gyn Viva",
+      valor: 1480,
+      data: hojeISO(-5)
+    },
+    {
+      id: crypto.randomUUID(),
+      tipo: "despesa",
+      descricao: "Compra de mudas",
+      categoria: "Ceasa",
+      valor: 420,
+      data: hojeISO(-4)
+    },
+    {
+      id: crypto.randomUUID(),
+      tipo: "despesa",
+      descricao: "Abastecimento da semana",
+      categoria: "Combustivel",
+      valor: 180,
+      data: hojeISO(-2)
+    },
+    {
+      id: crypto.randomUUID(),
+      tipo: "receita",
+      descricao: "Venda de final de semana",
+      categoria: "Pontinho Max",
+      valor: 930,
+      data: hojeISO(-1)
+    }
+  ];
+}
+
+function inicializarFirebase() {
+  try {
+    const config = window.FIREBASE_CONFIG;
+    if (
+      typeof firebase === "undefined" ||
+      !config ||
+      !config.apiKey ||
+      config.apiKey === FIREBASE_PLACEHOLDER
+    ) {
+      return false;
+    }
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(config);
+    }
+
+    auth = firebase.auth();
+    db = firebase.firestore();
+    return true;
+  } catch (error) {
+    console.error("Falha ao iniciar Firebase:", error);
+    return false;
+  }
+}
+
+function atualizarVisibilidadeApp(mostrarApp) {
+  els.authScreen.hidden = mostrarApp;
+  els.appContainer.hidden = !mostrarApp;
+}
+
+function atualizarCabecalhoUsuario() {
+  if (modoOnline && usuarioAtual) {
+    els.usuarioInfo.textContent = usuarioAtual.email || "Usuario conectado";
+    els.logoutBtn.hidden = false;
+    return;
+  }
+
+  els.usuarioInfo.textContent = "Modo local";
+  els.logoutBtn.hidden = true;
+}
+
+function setAuthStatus(mensagem, tone = "info") {
+  els.authStatus.textContent = mensagem;
+  els.authStatus.dataset.tone = tone;
+}
+
+function alternarBotoesAuth(emProcessamento) {
+  els.loginBtn.disabled = emProcessamento;
+  els.registerBtn.disabled = emProcessamento;
+  els.modoLocalBtn.disabled = emProcessamento;
+}
+
+async function onLogin(event) {
+  event.preventDefault();
+
+  if (!auth) {
+    ativarModoLocal("Preencha o firebase-config.js para ativar o login online.");
+    return;
+  }
+
+  const email = els.authEmail.value.trim();
+  const senha = els.authPassword.value;
+
+  if (!email || !senha) {
+    setAuthStatus("Informe email e senha para entrar.", "error");
+    return;
+  }
+
+  try {
+    alternarBotoesAuth(true);
+    setAuthStatus("Validando acesso...", "info");
+    await auth.signInWithEmailAndPassword(email, senha);
+  } catch (error) {
+    setAuthStatus(traduzirErroAuth(error), "error");
+  } finally {
+    alternarBotoesAuth(false);
+  }
+}
+
+async function onRegister() {
+  if (!auth) {
+    ativarModoLocal("Preencha o firebase-config.js para ativar o cadastro online.");
+    return;
+  }
+
+  const email = els.authEmail.value.trim();
+  const senha = els.authPassword.value;
+
+  if (!email || !senha) {
+    setAuthStatus("Preencha email e senha para criar a conta.", "error");
+    return;
+  }
+
+  if (senha.length < 6) {
+    setAuthStatus("A senha precisa ter pelo menos 6 caracteres.", "error");
+    return;
+  }
+
+  try {
+    alternarBotoesAuth(true);
+    setAuthStatus("Criando sua conta...", "info");
+    await auth.createUserWithEmailAndPassword(email, senha);
+    setAuthStatus("Conta criada com sucesso. Aguarde o carregamento do painel.", "success");
+  } catch (error) {
+    setAuthStatus(traduzirErroAuth(error), "error");
+  } finally {
+    alternarBotoesAuth(false);
+  }
+}
+
+async function onLogout() {
+  if (!auth) {
+    return;
+  }
+
+  await auth.signOut();
+}
+
+function onModoLocal() {
+  ativarModoLocal("Modo local ativo. Os dados ficam salvos apenas neste navegador.");
+}
+
+function ativarModoLocal(mensagem) {
+  modoOnline = false;
+  usuarioAtual = null;
+  movimentacoes = carregarMovimentacoesLocal();
+  atualizarCabecalhoUsuario();
+  atualizarVisibilidadeApp(true);
+  setAuthStatus(mensagem, "info");
+  render();
+}
+
+function carregarMovimentacoesLocal() {
   try {
     const salvo = localStorage.getItem(STORAGE_KEY);
     if (!salvo) {
-      return defaultMovimentacoes;
+      return criarMovimentacoesIniciais();
     }
 
     const parseado = JSON.parse(salvo);
     if (!Array.isArray(parseado)) {
-      return defaultMovimentacoes;
+      return criarMovimentacoesIniciais();
     }
 
-    return parseado;
+    return normalizarMovimentacoes(parseado);
   } catch {
-    return defaultMovimentacoes;
+    return criarMovimentacoesIniciais();
   }
 }
 
-function persistirMovimentacoes() {
+async function carregarMovimentacoesNuvem() {
+  if (!db || !usuarioAtual) {
+    movimentacoes = carregarMovimentacoesLocal();
+    return;
+  }
+
+  try {
+    const snapshot = await obterDocPainel().get();
+
+    if (snapshot.exists) {
+      const dados = snapshot.data();
+      if (Array.isArray(dados.movimentacoes)) {
+        movimentacoes = normalizarMovimentacoes(dados.movimentacoes);
+        return;
+      }
+    }
+
+    movimentacoes = criarMovimentacoesIniciais();
+    await persistirMovimentacoes();
+  } catch (error) {
+    console.error("Falha ao carregar dados online:", error);
+    movimentacoes = carregarMovimentacoesLocal();
+    setAuthStatus("Nao foi possivel ler o banco online. O painel abriu com os dados locais.", "error");
+  }
+}
+
+function normalizarMovimentacoes(lista) {
+  if (!Array.isArray(lista)) {
+    return [];
+  }
+
+  return lista
+    .filter((item) => item && item.categoria && item.data)
+    .map((item) => ({
+      id: item.id || crypto.randomUUID(),
+      tipo: item.tipo || tipoPorCategoria(item.categoria),
+      descricao: item.descricao || "Sem descricao",
+      categoria: item.categoria,
+      valor: Number(item.valor) || 0,
+      data: item.data
+    }));
+}
+
+function obterDocPainel() {
+  return db.collection("usuarios").doc(usuarioAtual.uid).collection("painel").doc("financeiro");
+}
+
+async function persistirMovimentacoes() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(movimentacoes));
+
+  if (modoOnline && db && usuarioAtual) {
+    await obterDocPainel().set(
+      {
+        email: usuarioAtual.email || "",
+        movimentacoes,
+        atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+  }
+}
+
+function traduzirErroAuth(error) {
+  const mensagens = {
+    "auth/email-already-in-use": "Este email ja esta em uso.",
+    "auth/invalid-email": "O email informado nao e valido.",
+    "auth/weak-password": "A senha e muito fraca. Use ao menos 6 caracteres.",
+    "auth/invalid-credential": "Email ou senha incorretos.",
+    "auth/user-not-found": "Usuario nao encontrado.",
+    "auth/wrong-password": "Senha incorreta.",
+    "auth/too-many-requests": "Muitas tentativas. Aguarde um pouco e tente novamente.",
+    "auth/network-request-failed": "Falha de conexao. Verifique sua internet."
+  };
+
+  return mensagens[error?.code] || "Nao foi possivel concluir a autenticacao agora.";
 }
 
 function onFiltroChange() {
