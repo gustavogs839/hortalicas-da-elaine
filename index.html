@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Hortalicas da Elaine | Gestao Financeira</title>
+	<link rel="icon" type="image/png" href="logo.png">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+	<div class="bg-shape bg-shape-1"></div>
+	<div class="bg-shape bg-shape-2"></div>
+
+	<main class="app-container">
+		<header class="topbar">
+			<div class="brand-wrap">
+				<img src="logo.png" alt="Logo Hortalicas da Elaine" class="brand-logo">
+				<div>
+					<h1>Hortalicas da Elaine</h1>
+					<p>Painel de receitas e despesas</p>
+				</div>
+			</div>
+			<div class="date-pill" id="dataAtual"></div>
+		</header>
+
+		<section class="kpi-grid">
+			<article class="kpi-card saldo">
+				<h2>Saldo Atual</h2>
+				<p id="saldoAtual">R$ 0,00</p>
+			</article>
+			<article class="kpi-card receita">
+				<h2>Total de Receitas</h2>
+				<p id="totalReceitas">R$ 0,00</p>
+			</article>
+			<article class="kpi-card despesa">
+				<h2>Total de Despesas</h2>
+				<p id="totalDespesas">R$ 0,00</p>
+			</article>
+			<article class="kpi-card margem">
+				<h2>Margem</h2>
+				<p id="margemResultado">0%</p>
+			</article>
+		</section>
+
+		<section class="content-grid">
+			<div class="panel form-panel">
+				<div class="panel-title-wrap">
+					<h3>Lancar movimentacao</h3>
+					<p>Registre receitas e despesas do negocio.</p>
+				</div>
+
+				<form id="financeForm" class="finance-form">
+					<div class="form-row type-selector">
+						<label>
+							<input type="radio" name="tipo" value="receita" checked disabled>
+							Receita
+						</label>
+						<label>
+							<input type="radio" name="tipo" value="despesa" disabled>
+							Despesa
+						</label>
+					</div>
+					<p class="field-help">O tipo e definido automaticamente pela categoria.</p>
+
+					<div class="form-row">
+						<label for="descricao">Descricao (opcional)</label>
+						<input type="text" id="descricao" placeholder="Ex: Venda de alface">
+					</div>
+
+					<div class="form-row two-col">
+						<div>
+							<label for="categoria">Categoria</label>
+							<select id="categoria" required>
+								<option value="">Selecione...</option>
+								<option value="Feira Gyn Viva">Feira Gyn Viva</option>
+								<option value="Feira Goia">Feira Goia</option>
+								<option value="Pontinho Max">Pontinho Max</option>
+								<option value="Entregas">Entregas</option>
+								<option value="Horta Ricardo">Horta Ricardo</option>
+								<option value="Horta Rita">Horta Rita</option>
+								<option value="Horta Edimar">Horta Edimar</option>
+								<option value="Ceasa">Ceasa</option>
+								<option value="Combustivel">Combustivel</option>
+								<option value="Manutencao de Veiculos">Manutencao de Veiculos</option>
+								<option value="Funcionarios">Funcionarios</option>
+								<option value="Mandioca">Mandioca</option>
+							</select>
+						</div>
+						<div>
+							<label for="valor">Valor (R$)</label>
+							<input type="number" id="valor" min="0.01" step="0.01" required placeholder="0,00">
+						</div>
+					</div>
+
+					<div class="form-row">
+						<label for="data">Data</label>
+						<input type="date" id="data" required>
+					</div>
+
+					<div class="form-actions">
+						<button type="submit" class="primary-btn" id="submitBtn">Salvar movimentacao</button>
+						<button type="button" class="ghost-btn" id="cancelEdit" hidden>Cancelar edicao</button>
+					</div>
+				</form>
+			</div>
+
+			<div class="panel chart-panel">
+				<div class="panel-title-wrap">
+					<h3>Visao financeira</h3>
+					<p>Acompanhe receitas e despesas em tempo real.</p>
+				</div>
+				<div class="chart-wrap">
+					<canvas id="chartReceitaDespesa"></canvas>
+				</div>
+				<div class="chart-wrap">
+					<canvas id="chartEvolucao"></canvas>
+				</div>
+				<div class="chart-wrap">
+					<canvas id="chartDespesasCategoria"></canvas>
+				</div>
+			</div>
+		</section>
+
+		<section class="panel table-panel">
+			<div class="panel-title-wrap table-head">
+				<div>
+					<h3>Historico de movimentacoes</h3>
+					<p>Ultimos registros financeiros.</p>
+				</div>
+				<div class="table-actions">
+					<button id="gerarPdf" class="primary-btn" type="button">Gerar PDF</button>
+					<button id="limparTudo" class="ghost-btn" type="button">Limpar tudo</button>
+				</div>
+			</div>
+
+			<div class="filter-bar">
+				<div class="filter-field">
+					<label for="filtroTipo">Filtrar por tipo</label>
+					<select id="filtroTipo">
+						<option value="todos">Todos</option>
+						<option value="receita">Receitas</option>
+						<option value="despesa">Despesas</option>
+					</select>
+				</div>
+				<div class="filter-field">
+					<label for="filtroCategoria">Filtrar por categoria</label>
+					<select id="filtroCategoria">
+						<option value="todas">Todas</option>
+					</select>
+				</div>
+				<div class="filter-field">
+					<label for="filtroDataInicio">Data inicial</label>
+					<input type="date" id="filtroDataInicio">
+				</div>
+				<div class="filter-field">
+					<label for="filtroDataFim">Data final</label>
+					<input type="date" id="filtroDataFim">
+				</div>
+				<div class="filter-summary" id="resumoFiltroSelecionado">
+					<p><strong>Total do filtro:</strong> <span id="totalFiltroSelecionado">R$ 0,00</span></p>
+					<p><strong>Receitas:</strong> <span id="receitasFiltroSelecionado">R$ 0,00</span> | <strong>Despesas:</strong> <span id="despesasFiltroSelecionado">R$ 0,00</span></p>
+				</div>
+				<button id="limparFiltro" class="ghost-btn" type="button">Limpar filtro</button>
+			</div>
+
+			<div class="table-container">
+				<table>
+					<thead>
+						<tr>
+							<th>Data</th>
+							<th>Descricao</th>
+							<th>Categoria</th>
+							<th>Tipo</th>
+							<th>Valor</th>
+							<th>Acao</th>
+						</tr>
+					</thead>
+					<tbody id="listaMovimentacoes"></tbody>
+				</table>
+			</div>
+		</section>
+	</main>
+
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+	<script src="app.js"></script>
+</body>
+</html>
